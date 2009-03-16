@@ -1,8 +1,20 @@
 module RestSourcery
   class ResourceCollectionProxy
   
-    def initialize(parent_url,klass)
-      @parent_url = parent_url
+    attr_reader :owner, :klass, :options
+  
+    # Constructor
+    #
+    # ==== Parameters
+    # owner<Resource>:: The owner object
+    # klass<Class>:: The class of the associated objects
+    # 
+    # ==== Options
+    # on<String>:: The collection URL this colleciton can be found
+    # --
+    def initialize(owner,klass,options)
+      @options = options
+      @owner = owner
       @klass = klass
     end
   
@@ -11,9 +23,13 @@ module RestSourcery
     def included?
       @_included
     end
+    
+    def collection_url
+      self.options[:on] || self.owner.class.build_url(owner.url,klass.collection_name)
+    end
   
     def build(attributes)
-      @klass.with_scope(:collection_url => @parent_url) do    
+      @klass.with_scope(:collection_url => self.collection_url) do    
         obj = @klass.build(attributes)
         self << obj unless @collection.nil?
         obj
@@ -28,7 +44,7 @@ module RestSourcery
   
     def method_missing(meth,*args,&block)
       if @klass.respond_to?(meth)
-        @klass.with_scope(:collection_url => @parent_url) do
+        @klass.with_scope(:collection_url => self.collection_url) do
           @klass.send(meth,*args,&block)
         end
       else

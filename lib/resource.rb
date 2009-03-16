@@ -2,8 +2,8 @@ module RestSourcery
   module Resource    
     
     def self.included(base)
-      base.send(:attr_accessor, :url)
-      base.send(:attr_reader, :attributes, :errors)
+      base.send(:include, ::HTTParty)
+      base.send(:attr_reader, :url, :attributes, :errors)
       base.send(:mattr_inheritable, :scope, :associations)
       
       # This has to be done like this otherwise we have ruby
@@ -21,6 +21,10 @@ module RestSourcery
       def api_key=(key)
         self.headers.update("x-api-key" => key)
       end
+      
+      def api_key
+        self.headers["x-api-key"]
+      end
   
       def collection_name(name=nil)
         @collection_name = name if name
@@ -36,16 +40,34 @@ module RestSourcery
         @current_scope || {}
       end
       
+      def property_map
+        @property_map ||= {}
+      end
+      
   
       # Define properties on the class
       # It's basically an accessor for the attributes hash.
+      # It can also map accessors to other elements.
       def property(*names)
+        protected_methods = %w{url attributes errors}
+        
         names.each do |name|
+          raise ArgumentError, "Can't define internal method #{name}, alias it as something else." if protected_methods.include?(name.to_s)
+          
+          if name.kind_of?(Hash)
+            arr = name.to_a.first
+            name = arr.first
+            attribute = arr.last.to_s
+          else
+            attribute = name.to_s
+          end
+          self.property_map[attribute] = name          
+          
           define_method(name) do
-            self.attributes[name.to_s]
+            self.attributes[attribute]
           end
           define_method("#{name}=") do |v|
-            self.attributes[name.to_s] = v
+            self.attributes[attribute] = v
           end
         end
       end
@@ -58,11 +80,9 @@ module RestSourcery
       # 
       # ==== Options
       # :klass<Class>:: The class that will be used for the elements of this collection
-      # :collection_url<String>:: The URL where we can get these elements ,defaults to the parent_url + the collection_name
       # --
       def has_many(collection_name,options={})
         class_name = (options[:klass] || collection_name.to_s.singularize.classify).to_s
-        parent_url = options[:collection_url] && "\"#{options[:collection_url]}\"" || "self.class.build_url(self.url,\"#{collection_name}\")"
     
         # Register association
         self.associations ||= []
@@ -70,8 +90,8 @@ module RestSourcery
     
         # Define methods
         methods = <<-EOS
-          def #{collection_name} 
-            @#{collection_name} ||= ResourceCollectionProxy.new(#{parent_url},#{class_name})      
+          def #{collection_name}(options={}) 
+            @#{collection_name} ||= ResourceCollectionProxy.new(self,#{class_name},options)
           end
       
           def #{collection_name}=(v)
@@ -139,7 +159,8 @@ module RestSourcery
   
       
       def build_url(*parts)
-        ("/" + (parts.flatten * "/")).gsub("//","/")
+        url = (parts.flatten.map{|c| c = c.to_s; c =~ /^\// ? c.split("/")[1..-1] : c.split("/") }.flatten * "/")
+        url =~ /^http:\/\/|^\// ? url : "/" + url
       end
       
       def collection_url
@@ -188,7 +209,15 @@ module RestSourcery
         @errors = {}
       end
 
+      # Load the resources data from a response, if the hash
+      # has a key called like this resource (self.resource_name) it will only pass
+      # that key to attributes=
+      #
+      # ==== Parameters
+      # params<Hash>:: The data hash to load
+      # --
       def load(params)
+        return if params.blank?
         if params.has_key?(self.resource_name)
           self.attributes = params[self.resource_name]
         else
@@ -196,6 +225,8 @@ module RestSourcery
         end
       end
 
+      # Set the URL of this resource if this URL is set
+      # RestSourcery considers this resource an existing one (not new)
       def url=(v)
         @new_record = false
         @url = v
@@ -222,6 +253,12 @@ module RestSourcery
 
       # Save this resource
       #
+      # ==== Options
+      # :on:: The url to save this resource to
+      #
+      # ==== Returns
+      # true:: If the resource has been saved
+      # false:: The resource could not be saved, tries to set self.errors 
       # --
       def save(options={})  
         if self.new?
@@ -231,42 +268,80 @@ module RestSourcery
         end
   
         case response.code
-          when "201" then self.load(response) && true # Created
-          when "200" then self.load(response) && true # Updated
-          when "422" then handle_invalid(response)
+          when "201","200" then handle_valid_response(response)
+          when "422" then handle_invalid_response(response)
           when "500" then raise("Failed with application error (500)")
           else raise("Invalid response: #{response.code}")
         end
   
       end
 
-      def handle_invalid(response)
-        self.load(response)
-        if errors = @attributes.delete("errors")
-          @errors = errors
-        end    
-        false
-      end
-
       def create(options={})
         options.reverse_merge! :on => self.collection_url
-        self.class.post(options[:on],:body => self.to_xml, :headers => {"content-type" => "application/xml"})    
+        self.class.post(options[:on],:body => self.to_xml)
       end
 
       def update(options={})
         options.reverse_merge! :on => self.url    
-        self.class.put(options[:on],:body => self.to_xml, :headers => {"content-type" => "application/xml"})    
+        self.class.put(options[:on],:body => self.to_xml)
       end
+
+      # Destroy this resource
+      #
+      # ==== Options
+      # :on:: The url to destroy this resource at
+      #
+      # ==== Returns
+      # true:: The resource has been destroyed
+      # false:: The resource could not be destroyed (check if this isn't a new record!)
+      # --
+      def destroy(options={})
+        return false if self.new?
+        options.reverse_merge! :on => self.url
+        response = self.class.delete(options[:on])
+        case response.code
+          when "200" then self.freeze && true
+          when "500" then raise("Failed with application error (500)")
+          else false
+        end
+      end
+
 
       def resource_name
         self.class.resource_name
       end
 
+      # Serialize this resource
+      #
+      # ==== Parameters
+      # options<Hash>:: Options to pass to the attributes.to_xml method
+      #
+      # ==== Options
+      # These are additional options to this method which will NOT be passed to Hash.to_xml
+      # :except<String,Array>:: An array or just a single key of the attributes hash that will not be passed to to_xml
+      #
+      # ==== Returns
+      # String:: This object serialized as XML
+      # --
       def to_xml(options={})
         attrs = {}
+        except_attrs = options.delete(:except) || []
+        except_attrs = [except_attrs] unless except_attrs.kind_of?(Array)
+        
+        # Collect all properties in the property_map
+        self.class.property_map.each do |attr_k,model_k|
+          next if except_attrs.include?(attr_k) || except_attrs.include?(model_k)
+          if self.respond_to?(model_k)
+            attrs[attr_k] =  self.send(model_k)
+          end
+        end
+        
+        # Collect all attributes, don't take those we have already matched in the propertymap
         self.attributes.each do |k,v|
+          next if attrs.has_key?(k) || except_attrs.include?(k)
           attrs[k] = self.respond_to?(k) ? self.send(k) : v
         end
+        
   
         attrs.to_xml(options.merge(:root => self.resource_name)) do |builder|
           if self.class.associations
@@ -280,12 +355,16 @@ module RestSourcery
         end
       end
 
+      # Is this a new record?
       def new?
         @new_record.nil? && true || @new_record
       end
 
+      # We have to force this one as it won't work with method_missing
       def id; self.attributes["id"]; end
+      def type; self.attributes["type"]; end
 
+      # Dynamic attributes hash accessors
       def method_missing(meth,*args)
         if meth.to_s =~ /=$/
           self.attributes[meth.to_s] = args.first
@@ -295,6 +374,25 @@ module RestSourcery
           super
         end
       end
+      
+      protected
+      
+      def handle_invalid_response(response)
+        self.load(response)
+        if errors = @attributes.delete("errors")
+          @errors = errors
+        end    
+        false
+      end
+      
+      def handle_valid_response(response)
+        self.load(response)
+        if response.headers.has_key?("location")
+          self.url = response.headers["location"].to_s
+        end
+        true
+      end
+      
     end # InstanceMethods
   end # Resource
 end # RestSourcery
