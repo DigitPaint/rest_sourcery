@@ -17,15 +17,7 @@ module RestSourcery
     end
     
     module ClassMethods
-      
-      def api_key=(key)
-        self.headers.update("x-api-key" => key)
-      end
-      
-      def api_key
-        self.headers["x-api-key"]
-      end
-  
+        
       def collection_name(name=nil)
         @collection_name = name if name
         @collection_name || self.to_s.demodulize.underscore.pluralize
