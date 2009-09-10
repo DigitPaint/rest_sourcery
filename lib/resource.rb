@@ -179,7 +179,7 @@ module RestSourcery
       protected
   
       def handle_response(response,url)
-        case response.code
+        case response.code.to_s
           when "200" then response
           when "404" then nil
           else raise("Invalid response: #{response.code} for #{url}")
