@@ -179,7 +179,7 @@ module RestSourcery
       protected
   
       def handle_response(response,url)
-        case response.code
+        case response.code.to_s
           when "200" then response
           when "404" then nil
           else raise("Invalid response: #{response.code} for #{url}")
@@ -263,7 +263,7 @@ module RestSourcery
           response = self.update(options)
         end
   
-        case response.code
+        case response.code.to_s
           when "201","200" then handle_valid_response(response)
           when "422" then handle_invalid_response(response)
           when "500" then raise("Failed with application error (500)")
@@ -295,7 +295,7 @@ module RestSourcery
         return false if self.new?
         options.reverse_merge! :on => self.url
         response = self.class.delete(options[:on])
-        case response.code
+        case response.code.to_s
           when "200" then self.freeze && true
           when "500" then raise("Failed with application error (500)")
           else false
