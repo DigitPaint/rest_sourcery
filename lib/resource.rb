@@ -252,10 +252,14 @@ module RestSourcery
       # true:: If the resource has been saved
       # false:: The resource could not be saved, tries to set self.errors 
       # --
-      def save(options={})  
+      def save(options={})
+        return false if !handle_callback(:before_save)
+        
         if self.new?
+          return false if !handle_callback(:before_create)
           response = self.create(options)
         else
+          return false if !handle_callback(:before_update)
           response = self.update(options)
         end
   
@@ -368,6 +372,12 @@ module RestSourcery
       end
       
       protected
+      
+      def handle_callback(callback_name)
+        return true unless self.respond_to? callback_name
+        
+        !(self.send(callback_name) == false)
+      end
       
       def handle_invalid_response(response)
         self.load(response)
