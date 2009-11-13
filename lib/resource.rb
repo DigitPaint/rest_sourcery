@@ -4,12 +4,17 @@ module RestSourcery
     def self.included(base)
       base.send(:include, ::HTTParty)
       base.send(:attr_reader, :url, :attributes, :errors)
-      base.send(:mattr_inheritable, :scope, :associations)
+      base.send(:mattr_inheritable, :scope, :associations, :property_map)
       
       # This has to be done like this otherwise we have ruby
       # method calling problems.
       class << base
         attr_writer :collection_name, :resource_name, :current_scope
+        alias :property_map_without_default :property_map
+        alias :property_map_without_default= :property_map=
+        def property_map
+          self.property_map_without_default ||= {}
+        end        
       end
     
       base.extend(ClassMethods)
@@ -31,12 +36,7 @@ module RestSourcery
       def current_scope
         @current_scope || {}
       end
-      
-      def property_map
-        @property_map ||= {}
-      end
-      
-  
+        
       # Define properties on the class
       # It's basically an accessor for the attributes hash.
       # It can also map accessors to other elements.
