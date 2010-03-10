@@ -363,7 +363,7 @@ module RestSourcery
       # Dynamic attributes hash accessors
       def method_missing(meth,*args)
         if meth.to_s =~ /=$/
-          self.attributes[meth.to_s.sub(/=$/,"")] = args.first
+          self.attributes[meth.to_s.gsub(/=$/,'')] = args.first
         elsif self.attributes.has_key?(meth.to_s)
           self.attributes[meth.to_s]
         else
