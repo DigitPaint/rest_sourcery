@@ -238,7 +238,7 @@ module RestSourcery
           if self.respond_to?("#{k}=")
             self.send("#{k}=",v)
           else
-            @attributes[k] = v
+            @attributes[k.to_s] = v
           end
         end
       end
