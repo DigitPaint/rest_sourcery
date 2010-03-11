@@ -265,7 +265,7 @@ module RestSourcery
   
         case response.code.to_s
           when "201","200" then handle_valid_response(response)
-          when "422" then handle_invalid_response(response)
+          when "401","422" then handle_invalid_response(response)
           when "500" then raise("Failed with application error (500)")
           else raise("Invalid response: #{response.code}")
         end
