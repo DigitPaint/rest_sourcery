@@ -2,9 +2,12 @@ module RestSourcery
   module Resource    
     
     def self.included(base)
-      base.send(:include, ::HTTParty)
+      base.send(:include, HTTParty)
       base.send(:attr_reader, :url, :attributes, :errors)
       base.send(:mattr_inheritable, :scope, :associations, :property_map)
+      base.instance_variable_set("@property_map", {})
+      base.instance_variable_set("@associations", [])
+      base.instance_variable_set("@scope", [])
       
       # This has to be done like this otherwise we have ruby
       # method calling problems.
@@ -14,7 +17,15 @@ module RestSourcery
         alias :property_map_without_default= :property_map=
         def property_map
           self.property_map_without_default ||= {}
-        end        
+        end
+
+        # Hack so we can still use subclassing with a base class.
+        alias :inherited_with_clone :inherited        
+        def inherited(subclass)
+          self.inherited_with_clone(subclass)
+          subclass.instance_variable_set("@default_options", self.instance_variable_get("@default_options"))
+        end
+        
       end
     
       base.extend(ClassMethods)
