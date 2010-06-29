@@ -208,6 +208,7 @@ module RestSourcery
     
     module InstanceMethods
       def initialize(params)
+        self.attributes = {}        
         load(params)
         @errors = {}
       end
