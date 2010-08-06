@@ -127,12 +127,15 @@ module RestSourcery
       #
       # ==== Options
       # :from<String> :: The collection url we should get the resource from, if empty it will try to determine the URL itself.
+      # :query<Hash>:: Query parameters to pass to the GET request
       #
       # --
       def find(id,options={})
         options.reverse_merge! :from => collection_url
+        request_options = options.slice(:query)
+                
         url = build_url(options[:from],id)
-        if result = handle_response(self.get(url),url)
+        if result = handle_response(self.get(url, request_options),url)
           e = self.new(result)
           e.url = url
           e
@@ -154,7 +157,7 @@ module RestSourcery
         request_options = options.slice(:query)
     
         url = build_url(options[:from])
-        result = handle_response(self.get(url,request_options),url)
+        result = handle_response(self.get(url, request_options),url)
         if result && result.has_key?(self.collection_name)
           initialize_collection(result[self.collection_name],url)
         end
@@ -197,6 +200,7 @@ module RestSourcery
         end
       end
   
+      # Initialize a collection that comes from remote
       def initialize_collection(collection_data,url=nil)
         collection_data.map do |c| 
           o = self.new({self.resource_name => c})
