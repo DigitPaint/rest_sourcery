@@ -11,9 +11,11 @@ module RestSourcery
     # 
     # ==== Options
     # on<String>:: The collection URL this colleciton can be found
+    # included<Boolean>:: Is this a nested collection? If it is it will always be included in the parent when storing
     # --
     def initialize(owner,klass,options)
       @options = options
+      @_included = true if options[:included]
       @owner = owner
       @klass = klass
     end
