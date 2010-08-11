@@ -130,11 +130,12 @@ module RestSourcery
       # ==== Options
       # :from<String> :: The collection url we should get the resource from, if empty it will try to determine the URL itself.
       # :query<Hash>:: Query parameters to pass to the GET request
+      # :headers<Hash>:: Headers to pass
       #
       # --
       def find(id,options={})
         options.reverse_merge! :from => collection_url
-        request_options = options.slice(:query)
+        request_options = options.slice(:query, :headers)
                 
         url = build_url(options[:from],id)
         if result = handle_response(self.get(url, request_options),url)
@@ -156,7 +157,7 @@ module RestSourcery
       # --
       def all(options={})
         options.reverse_merge! :from => collection_url, :query => {}
-        request_options = options.slice(:query)
+        request_options = options.slice(:query, :headers)
     
         url = build_url(options[:from])
         result = handle_response(self.get(url, request_options),url)
@@ -265,6 +266,7 @@ module RestSourcery
       #
       # ==== Options
       # :on:: The url to save this resource to
+      # :headers:: The extra headers to set for this request
       #
       # ==== Returns
       # true:: If the resource has been saved
@@ -292,12 +294,16 @@ module RestSourcery
 
       def create(options={})
         options.reverse_merge! :on => self.collection_url
-        self.class.post(options[:on],:body => self.to_xml)
+        req = {:body => self.to_xml} 
+        req[:headers] = options[:headers] if options[:headers]
+        self.class.post(options[:on], req)
       end
 
       def update(options={})
         options.reverse_merge! :on => self.url    
-        self.class.put(options[:on],:body => self.to_xml)
+        req = {:body => self.to_xml} 
+        req[:headers] = options[:headers] if options[:headers]        
+        self.class.put(options[:on], req)
       end
 
       # Destroy this resource
@@ -341,6 +347,7 @@ module RestSourcery
         attrs = {}
         except_attrs = options.delete(:except) || []
         except_attrs = [except_attrs] unless except_attrs.kind_of?(Array)
+        except_attrs.map!{|a| a.to_s }
         
         # Collect all properties in the property_map
         self.class.property_map.each do |attr_k,model_k|
@@ -360,6 +367,7 @@ module RestSourcery
         attrs.to_xml(options.merge(:root => self.resource_name)) do |builder|
           if self.class.associations
             self.class.associations.each do |assoc_name,options|
+              next if except_attrs.include?(assoc_name)
               collection_proxy = self.send(assoc_name)
               if collection_proxy.included? && collection_proxy.size > 0
                 collection_proxy.to_xml(:builder => builder, :root => assoc_name.to_s, :skip_instruct => true)
