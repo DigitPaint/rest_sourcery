@@ -365,6 +365,7 @@ module RestSourcery
         
   
         attrs.to_xml(options.merge(:root => self.resource_name)) do |builder|
+          yield(builder) if block_given?
           if self.class.associations
             self.class.associations.each do |assoc_name,options|
               next if except_attrs.include?(assoc_name)
