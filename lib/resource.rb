@@ -3,6 +3,11 @@ module RestSourcery
     
     def self.included(base)
       base.send(:include, HTTParty)
+      
+      if (defined? REST_SOURCERY_PROXY_URL == "constant") && (defined? REST_SOURCERY_PROXY_PORT == "constant")
+        base.http_proxy(REST_SOURCERY_PROXY_URL, REST_SOURCERY_PROXY_PORT)
+      end
+      
       base.send(:attr_reader, :url, :attributes, :errors)
       base.send(:mattr_inheritable, :scope, :associations, :property_map)
       base.instance_variable_set("@property_map", {})
