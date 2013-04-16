@@ -3,7 +3,7 @@ module RestSourcery
     
     def self.included(base)
       base.send(:include, HTTParty)
-      base.send(:attr_reader, :url, :attributes, :errors)
+      base.send(:attr_reader, :url, :attributes, :errors, :response)
       base.send(:mattr_inheritable, :scope, :associations, :property_map)
       base.instance_variable_set("@property_map", {})
       base.instance_variable_set("@associations", {})
@@ -285,7 +285,7 @@ module RestSourcery
   
         case response.code.to_s
           when "201","200" then handle_valid_response(response)
-          when "422" then handle_invalid_response(response)
+          when "422", "432" then handle_invalid_response(response)
           when "401" then raise("Unauthorized access (401)")
           when "500" then raise("Failed with application error (500)")
           else raise("Invalid response: #{response.code}")
@@ -408,10 +408,11 @@ module RestSourcery
       end
       
       def handle_invalid_response(response)
+        @response = response
         self.load(response)
         if errors = @attributes.delete("errors")
           @errors = errors
-        end    
+        end
         false
       end
       
