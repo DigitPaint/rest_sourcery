@@ -287,7 +287,12 @@ module RestSourcery
           when "201","200" then handle_valid_response(response)
           when "422", "432" then handle_invalid_response(response)
           when "401" then raise("Unauthorized access (401)")
-          when "500" then raise("Failed with application error (500)")
+          when "500"
+            if response.body.include?("DMQ::ConnectFailedError")
+              raise("Failed Connect to DMQ (500)")
+            else
+              raise("Failed with application error (500)")
+            end
           else raise("Invalid response: #{response.code}")
         end
   
@@ -322,7 +327,12 @@ module RestSourcery
         response = self.class.delete(options[:on])
         case response.code.to_s
           when "200" then self.freeze && true
-          when "500" then raise("Failed with application error (500)")
+          when "500"
+            if response.body.include?("DMQ::ConnectFailedError")
+              raise("Failed Connect to DMQ (500)")
+            else
+              raise("Failed with application error (500)")
+            end
           else false
         end
       end
